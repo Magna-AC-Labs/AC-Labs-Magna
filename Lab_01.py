@@ -3,10 +3,12 @@
 
 def check_county(county):
     for i in county:
-        if i.isdigit():
+        if i.isdigit():  
             return False
         
-    county_list = ["TM", "CS", "GJ", "MH"]
+    county_list = ["B", "AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ", "CS", "CL", "CJ",
+                   "CT", "CV", "DB", "DJ", "GL", "GR", "GJ", "HR", "HD", "IL", "IS", "IF", "MM", "MH", "MS",
+                   "NT", "OT", "PH", "SM", "SJ", "SB", "SV", "TR", "TM", "TL", "VL", "VS", "VN"]
 
     if county in county_list:
         return True
@@ -23,65 +25,53 @@ def check_numbers(number):
 
     return True
 
-def check_name(name):
+def check_numbers_B(number):
+    for i in number:
+        if i.isalpha():
+            return False;
+    
+    if number == "000":
+        return False
 
+    return True
+
+def check_name(name):
+    for i in name:
+        if i.isalpha() == False:
+            return False
+    return True
 
 def check_license_plate(plate_number):
     string = plate_number.replace(" ", "")
-    
-
     string = string.upper()
     #TM13SKY
 
     if len(string) == 7:
         #split
-        county = string[:2]
-
-        if check_county(county) == False:
-            return False
-        
-        number = string[2:4]
-
-        if check_numbers(number) == False:
-            return False
-        
-        name = string[4:7]
-
-        #checks
-        print(check_county(county))
-        print(check_numbers(number))
-
-        print(county)
-        print(number)
-        print(name)
-    elif len(string) == 6:
-        print("B")
-    else:
-        print("Invalid plate number")
-
-check_license_plate("tm 00 SKY")
-
-
-# count_region = 0
-#         count_number = 0
-
-#         region = "" 
-#         number = "" 
-#         name = ""
-
-#         # edge case -> 5C 48 ABC 
-#         # edge case -> TM 00 ABC
-
-#         for i in string:
-#             if i.isalpha() and count_region < 2 :
-#                 region += i
-#                 count_region += 1
-#             elif i.isdigit() and count_number < 2:
-#                 number += i
-#                 count_number += 1
-#             else:
-#                 name += i
+        #* Bucharest case with 3 digits
+        if(string[0] == 'B'):
+            number = string[1:4]
+            name = string[4:]
             
-#         print(region)
-#         print(number)
-#         print(name)
+            return check_numbers_B(number) and check_name(name)
+        else :
+            #* Common plate with 2 letters for county and 2 digits for number
+            county = string[:2]
+            number = string[2:4]
+            name = string[4:]
+
+            return check_county(county) and check_numbers(number) and check_name(name)
+    elif len(string) == 6:
+        
+        #* Bucharest with 2 digits
+        if string[0] == 'B':
+            number = string[1:3]
+            name = string[3:]
+            
+            return check_numbers(number) and check_name(name)
+        else: 
+            return False
+    else:
+        #print("Invalid plate number")
+        return False
+    
