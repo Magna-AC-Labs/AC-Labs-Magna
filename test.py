@@ -2,7 +2,7 @@ from Lab_01 import check_license_plate
 from colorama import Fore, Back, Style, init
 
 passed = 0
-total = 14
+total = 15
 failed = 0
 
 numbers = [
@@ -19,7 +19,8 @@ numbers = [
     "B 11 ANA",
     "AB 00 BBB",
     "CJ 1 CCC",
-    "B1 01 AAA" # Returneaza true pentru ca dupa prelucrare spatii o sa am B101AAA, cazul Bucuresti cu 3 cifre
+    "B1 01 AAA", # Returneaza true pentru ca dupa prelucrare spatii o sa am B101AAA, cazul Bucuresti cu 3 cifre
+    "BM 11 Asa"
 ]
 
 expectedOutput = [
@@ -36,7 +37,8 @@ expectedOutput = [
     True,
     False, 
     False,
-    True
+    True,
+    False
 ]
 
 failedTestContents = []
