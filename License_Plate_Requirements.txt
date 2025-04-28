@@ -1,0 +1,4 @@
+numere rosii
+corp diplomatic
+nr de politie
+si alte edge case uri pt nr din romania -> vreo 7
