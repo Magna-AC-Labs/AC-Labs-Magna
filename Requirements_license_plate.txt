@@ -1,0 +1,7 @@
+1) Numar comun -> TM 13 SKY rezolvat, B 01 CVA, B 001 CVA, etc ---> Rezolvat
+2) Numere rosii -> codul judetului + 3 pana la 6 cifre, mereu prima cifra este zero si a doua non-zero ---> Rezolvat
+3) Numere temporare pe termen lung -> codul judetului + 3 pana la 6 cifre, nu incepe cu zero ---> Rezolvat, dar aici putem avea probleme cu cifrele ce indica data de expirare
+4) Armata -> Incep cu litera A + 3 pana la 7 cifre  ----> Rezolvat
+5) Ministerul Afacerilor Interne -> MAI + 4 cifre?
+6) Numere diplomatice -> Incep cu CD sau CO sau TC + 6 cifre ---> Rezolvat
+7) Numere de administratii locale -> 

@@ -1,8 +1,9 @@
 from Lab_01 import check_license_plate
+from Lab_01 import check_common_plate
 from colorama import Fore, Back, Style, init
 
 passed = 0
-total = 15
+total = 16
 failed = 0
 
 numbers = [
@@ -21,6 +22,20 @@ numbers = [
     "CJ 1 CCC",
     "B1 01 AAA", # Returneaza true pentru ca dupa prelucrare spatii o sa am B101AAA, cazul Bucuresti cu 3 cifre
     "BM 11 Asa"
+    ,"CS 01231"
+    ,"BH 0121313"
+    ,"AR 13124"
+    ,"CT 013141"
+    ,"CJ 13141"
+    ,"VL 01"
+    ,"A 12331"
+    ,"B 12321"
+    ,"A 12314141"
+    ,"CD 146 512"
+    ,"TC 123 123"
+    ,"CO 123 132"
+    ,"CD 1231"
+    ,"IF 001212"
 ]
 
 expectedOutput = [
@@ -39,11 +54,25 @@ expectedOutput = [
     False,
     True,
     False
+    ,True
+    ,False
+    ,True
+    ,True
+    ,True
+    ,False
+    ,True
+    ,False
+    ,False
+    ,True
+    ,True
+    ,True
+    ,False
+    ,False
 ]
 
 failedTestContents = []
 
-for i in range(total):
+for i in range(len(numbers)):
     if check_license_plate(numbers[i]) != expectedOutput[i]:
         failed += 1
         failedTestContents.append(numbers[i])
