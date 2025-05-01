@@ -126,8 +126,20 @@ def check_army_license_plate(plate_number):
     return False
     
 def check_police_license_plate(plate_number):
-    #MAI + []
-    #! Aici nu stiu ce format are, MAI + 4 cifre? MAI + NNN + LL?
+    #MAI + [5 <-> 6] digits
+    string = plate_number.replace(" ", "")
+    string = string.upper()
+    
+    name = string[0:3]
+    number = string[3:]
+    
+    if(name == "MAI"):
+        if(len(number) >= 5 and len(number) <= 6):
+            for i in number:
+                if i.isalpha():
+                    return False
+            return True
+    
     return False
 
 def check_diplomatic_license_plate(plate_number):
@@ -168,6 +180,10 @@ def check_license_plate(plate_number):
     
     if(check_diplomatic_license_plate(plate_number)):
         print("Diplomatic -> ", plate_number)
+        return True
+    
+    if(check_police_license_plate(plate_number)):
+        print("Police -> ", plate_number)
         return True
     
     return False

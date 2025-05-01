@@ -36,6 +36,8 @@ numbers = [
     ,"CO 123 132"
     ,"CD 1231"
     ,"IF 001212"
+    ,"MAI 12345"
+    ,"IMA 12345"
 ]
 
 expectedOutput = [
@@ -67,6 +69,8 @@ expectedOutput = [
     ,True
     ,True
     ,False
+    ,False
+    ,True
     ,False
 ]
 
