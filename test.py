@@ -38,6 +38,7 @@ numbers = [
     ,"IF 001212"
     ,"MAI 12345"
     ,"IMA 12345"
+    ,"IF O4 LYD"
 ]
 
 expectedOutput = [
@@ -72,6 +73,7 @@ expectedOutput = [
     ,False
     ,True
     ,False
+    ,True
 ]
 
 failedTestContents = []

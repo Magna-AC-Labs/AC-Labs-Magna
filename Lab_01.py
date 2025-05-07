@@ -15,11 +15,20 @@ def check_county(county):
     else:
         return False
     
-def check_numbers(number):
+def check_numbers(number):  #* Aici e posibil sa vada litera O in locul cifrei 0 sau litera I in locul cifrei 1
     for i in number:
         if i.isalpha():
-            return False
+            if i == 'O': 
+                i = 0
+            elif i == 'I':
+                i = 1
+            elif i == 'S':
+                i = 5
+            else:
+                return False
+                
 
+    
     if number == "00":
         return False
 
@@ -28,17 +37,31 @@ def check_numbers(number):
 def check_numbers_B(number):
     for i in number:
         if i.isalpha():
-            return False;
+            if i == 'O': 
+                i = 0
+            elif i == 'I':
+                i = 1
+            elif i == 'S':
+                i = 5
+            else:
+                return False
     
     if number == "000":
         return False
 
     return True
 
-def check_name(name):
+def check_name(name):   #* Si la nume, caracterele O, I, S pot fi vazute de catre camera ca fiind cifre.
     for i in name:
         if i.isalpha() == False:
-            return False
+            if i == 1:
+                i = 'I'
+            elif i == 0:
+                i = 'O'
+            elif i == 5:
+                i = 'S'
+            else:
+                return False
     return True
 
 def check_common_plate(plate_number):
@@ -59,7 +82,7 @@ def check_common_plate(plate_number):
             county = string[:2]
             number = string[2:4]
             name = string[4:]
-
+            
             return check_county(county) and check_numbers(number) and check_name(name)
     elif len(string) == 6:
         
@@ -162,6 +185,8 @@ def check_diplomatic_license_plate(plate_number):
     return False
  
 def check_license_plate(plate_number):
+    plate_number = plate_number.rstrip() #! Aici am avut o problema, avea un caracter in plus la final care trebuia sa fie eliminat
+    
     if(check_common_plate(plate_number)):
         print("Common plate -> ", plate_number)
         return True
