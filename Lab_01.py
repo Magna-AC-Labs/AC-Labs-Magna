@@ -51,7 +51,7 @@ def check_numbers_B(number):
 
     return True
 
-def check_name(name):   #* Si la nume, caracterele O, I, S pot fi vazute de catre camera ca fiind cifre.
+def check_name(name):   #* Si la nume, caracterele O, I, S pot fi vazute de catre camera ca fiind cifre
     for i in name:
         if i.isalpha() == False:
             if i == 1:
