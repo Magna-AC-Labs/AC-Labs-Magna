@@ -3,8 +3,17 @@
 
 def check_county(county):
     for i in county:
-        if i.isdigit():  
-            return False
+        if i.isdigit():
+            if i == 8:
+                i = 'B'
+            elif i == 1:
+                i = 'I'
+            elif i == 0:
+                i = 'O'
+            elif i == 5:
+                i = 'S'
+            else:  
+                return False
         
     county_list = ["B", "AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ", "CS", "CL", "CJ",
                    "CT", "CV", "DB", "DJ", "GL", "GR", "GJ", "HR", "HD", "IL", "IS", "IF", "MM", "MH", "MS",
@@ -60,8 +69,13 @@ def check_name(name):   #* Si la nume, caracterele O, I, S pot fi vazute de catr
                 i = 'O'
             elif i == 5:
                 i = 'S'
+            elif i == 8:
+                i = 'B'
             else:
                 return False
+        elif i == 'l':
+            i = 'I'
+            
     return True
 
 def check_common_plate(plate_number):
@@ -72,7 +86,7 @@ def check_common_plate(plate_number):
     if len(string) == 7:
         #split
         #* Bucharest case with 3 digits
-        if(string[0] == 'B'):
+        if(string[0] == 'B' or string[0] == '8'):
             number = string[1:4]
             name = string[4:]
             if check_numbers_B(number) and check_name(name):
@@ -87,7 +101,7 @@ def check_common_plate(plate_number):
     elif len(string) == 6:
         
         #* Bucharest with 2 digits
-        if string[0] == 'B':
+        if string[0] == 'B' or string[0] == '8':
             number = string[1:3]
             name = string[3:]
             
