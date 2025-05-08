@@ -40,7 +40,7 @@ def four_point_transform(image, pts):
     return warped
 
 def plateRecognition():
-    img = cv2.imread('photo.jpg') #! Aici trebuie cumva sa luam pozele in mod dinamic
+    img = cv2.imread('B58PKW.jpg') #! Aici trebuie cumva sa luam pozele in mod dinamic
     if img is None:
         print("Eroare: imaginea nu a fost gasita.")
         exit()

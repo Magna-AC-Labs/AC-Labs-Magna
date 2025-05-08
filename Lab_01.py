@@ -198,8 +198,18 @@ def check_diplomatic_license_plate(plate_number):
             return True
     return False
  
+def delete_last_characters(plate_number):  #? Elimina caracterele de final care nu sunt litere
+    while len(plate_number) >= 7:
+        if plate_number[-1].isalnum() == False:
+            plate_number = plate_number[:-2] #! Aici am avut o problema, avea un caracter in plus la final care trebuia sa fie eliminat
+        else: 
+            break
+    return plate_number
+        
+ 
 def check_license_plate(plate_number):
-    plate_number = plate_number.rstrip() #! Aici am avut o problema, avea un caracter in plus la final care trebuia sa fie eliminat
+    plate_number = delete_last_characters(plate_number)
+    print("Plate number -> ", plate_number)
     
     if(check_common_plate(plate_number)):
         print("Common plate -> ", plate_number)
