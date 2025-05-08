@@ -75,15 +75,15 @@ def check_common_plate(plate_number):
         if(string[0] == 'B'):
             number = string[1:4]
             name = string[4:]
+            if check_numbers_B(number) and check_name(name):
+                return True
             
-            return check_numbers_B(number) and check_name(name)
-        else :
-            #* Common plate with 2 letters for county and 2 digits for number
-            county = string[:2]
-            number = string[2:4]
-            name = string[4:]
+        #* Common plate with 2 letters for county and 2 digits for number
+        county = string[:2]
+        number = string[2:4]
+        name = string[4:]
             
-            return check_county(county) and check_numbers(number) and check_name(name)
+        return check_county(county) and check_numbers(number) and check_name(name)
     elif len(string) == 6:
         
         #* Bucharest with 2 digits

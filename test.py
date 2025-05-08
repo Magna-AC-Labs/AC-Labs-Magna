@@ -39,6 +39,7 @@ numbers = [
     ,"MAI 12345"
     ,"IMA 12345"
     ,"IF O4 LYD"
+    ,"BT 10 AAA"
 ]
 
 expectedOutput = [
@@ -73,6 +74,7 @@ expectedOutput = [
     ,False
     ,True
     ,False
+    ,True
     ,True
 ]
 
