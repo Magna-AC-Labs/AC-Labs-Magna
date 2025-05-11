@@ -1,29 +1,20 @@
 import cv2
+import imutils
 import numpy as np
 import pytesseract
-import imutils
-import logging
-
-# Optional: Set Tesseract path (needed in some Raspberry Pi setups)
-# pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
-
-logging.basicConfig(level=logging.INFO)
+from PIL import Image
 
 def order_points(pts):
-    """Orders 4 points for perspective transform."""
     rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]  # Top-left
-    rect[2] = pts[np.argmax(s)]  # Bottom-right
-
+    rect[0] = pts[np.argmin(s)]     # top-left
+    rect[2] = pts[np.argmax(s)]     # bottom-right
     diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]  # Top-right
-    rect[3] = pts[np.argmax(diff)]  # Bottom-left
-
+    rect[1] = pts[np.argmin(diff)]  # top-right
+    rect[3] = pts[np.argmax(diff)]  # bottom-left
     return rect
 
 def four_point_transform(image, pts):
-    """Applies perspective transform to get a top-down view."""
     rect = order_points(pts)
     (tl, tr, br, bl) = rect
 
@@ -39,76 +30,85 @@ def four_point_transform(image, pts):
         [0, 0],
         [maxWidth - 1, 0],
         [maxWidth - 1, maxHeight - 1],
-        [0, maxHeight - 1]], dtype="float32")
+        [0, maxHeight - 1]
+    ], dtype="float32")
 
     M = cv2.getPerspectiveTransform(rect, dst)
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
-def preprocess_image(image_path):
-    """Loads and preprocesses image."""
-    image = cv2.imread(image_path)
-    if image is None:
-        logging.error("Image not found!")
-        return None, None
+def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.5, threshold=0):
+    blurred = cv2.GaussianBlur(image, kernel_size, sigma)
+    sharpened = float(amount + 1) * image - float(amount) * blurred
+    sharpened = np.clip(sharpened, 0, 255).astype(np.uint8)
+    if threshold > 0:
+        low_contrast_mask = np.abs(image - blurred) < threshold
+        np.copyto(sharpened, image, where=low_contrast_mask)
+    return sharpened
 
-    image = cv2.resize(image, (480, 360))  # Resize for speed
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    edged = cv2.Canny(gray, 30, 200)
+# Read and resize input
+img = cv2.imread('photo1.jpg')
+if img is None:
+    print("Eroare: imaginea nu a fost gasita.")
+    exit()
 
-    return image, edged
+img = cv2.resize(img, (620, 480))
 
-def find_plate_contour(edged):
-    """Finds the most probable license plate contour."""
-    cnts = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = imutils.grab_contours(cnts)
-    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
+# Preprocess image
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+gray = cv2.bilateralFilter(gray, 11, 17, 17)
 
-    for c in cnts:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.018 * peri, True)
-        if len(approx) == 4:
-            x, y, w, h = cv2.boundingRect(approx)
-            aspect_ratio = w / float(h)
-            if 2 < aspect_ratio < 5:
-                return approx
+# Optional sharpening of full image (can improve contour detection)
+gray = unsharp_mask(gray)
 
-    return None
+cv2.imshow("gray", gray)
+cv2.waitKey(0)
 
-def ocr_plate(warped):
-    """Performs OCR on the transformed plate image."""
-    gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+# Edge detection
+edged = cv2.Canny(gray, 30, 200)
+cv2.imshow("edged", edged)
+cv2.waitKey(0)
 
-    # Optional: Morphology to remove noise
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+# Detect contours
+cnts = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+cnts = imutils.grab_contours(cnts)
+cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:10]
+screenCnt = None
 
-    config = '--oem 1 --psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    text = pytesseract.image_to_string(cleaned, config=config)
-    return text.strip(), cleaned
+for c in cnts:
+    peri = cv2.arcLength(c, True)
+    approx = cv2.approxPolyDP(c, 0.018 * peri, True)
+    if len(approx) == 4:
+        screenCnt = approx
+        break
 
-def main(image_path):
-    image, edged = preprocess_image(image_path)
-    if image is None or edged is None:
-        return
+if screenCnt is None:
+    print("No contour detected.")
+    exit()
 
-    plate_contour = find_plate_contour(edged)
-    if plate_contour is None:
-        logging.warning("No license plate contour found.")
-        return
+cv2.drawContours(img, [screenCnt], -1, (0, 255, 0), 3)
+cv2.imshow("Contours", img)
+cv2.waitKey(0)
 
-    warped = four_point_transform(image, plate_contour.reshape(4, 2))
-    text, cleaned_plate = ocr_plate(warped)
+# Perspective transform
+warped = four_point_transform(img, screenCnt.reshape(4, 2))
 
-    logging.info(f"Detected License Plate Text: {text}")
+# Convert to grayscale for OCR
+gray_plate = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 
-    # Save results instead of showing (good for headless Pi)
-    cv2.imwrite("detected_plate.jpg", cleaned_plate)
-    cv2.imwrite("edged.jpg", edged)
-    logging.info("Saved plate image as 'detected_plate.jpg'")
+# Apply sharpening to plate region
+gray_plate = unsharp_mask(gray_plate)
 
-# Run the pipeline
-if __name__ == "__main__":
-    main("photo1.jpg")
+# Thresholding for OCR
+_, plate_thresh = cv2.threshold(gray_plate, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+# OCR
+config = '--psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+text = pytesseract.image_to_string(plate_thresh, config=config, lang='eng')
+print("Detected Number is:", text.strip())
+
+# Show result
+cv2.imshow("Original Image", img)
+cv2.imshow("Cropped & Corrected Plate", plate_thresh)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
