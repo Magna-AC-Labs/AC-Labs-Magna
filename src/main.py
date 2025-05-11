@@ -9,7 +9,7 @@ from checkplates import check_license_plate
 
 def capture_photo(path='photo.jpg'):
     print("Capturing image...")
-    subprocess.run(['libcamera-jpeg', '-o', path, '-t', '2000'], check=True)
+    subprocess.run(['libcamera-jpeg', '-o', path, '-t', '4000'], check=True)
     print("Image captured.")
 
 def order_points(pts):
@@ -40,7 +40,7 @@ def four_point_transform(image, pts):
     M = cv2.getPerspectiveTransform(rect, dst)
     return cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
-def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.5, threshold=0):
+def unsharp_mask(image, kernel_size=(5, 5), sigma=2.0, amount=1.5, threshold=0):
     blurred = cv2.GaussianBlur(image, kernel_size, sigma)
     sharpened = float(amount + 1) * image - float(amount) * blurred
     sharpened = np.clip(sharpened, 0, 255).astype(np.uint8)
@@ -61,8 +61,17 @@ def detect_license_plate(image_path='photo.jpg'):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
     gray = unsharp_mask(gray)
+    
+    #show grayscale image
+    cv2.imshow("GRAY", gray)
+    cv2.waitKey(0)
 
     edged = cv2.Canny(gray, 30, 200)
+    
+    #show edges 
+    cv2.imshow("edged", edged)
+    cv2.waitKey(0)
+    
     cnts = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:10]
@@ -78,6 +87,11 @@ def detect_license_plate(image_path='photo.jpg'):
     if screenCnt is None:
         print("No license plate detected.")
         return
+        
+    #show contours
+    cv2.drawContours(img, [screenCnt], -1, (0, 255, 0), 3)
+    cv2.imshow("Contours", img)
+    cv2.waitKey(0)
 
     warped = four_point_transform(img, screenCnt.reshape(4, 2))
     gray_plate = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
