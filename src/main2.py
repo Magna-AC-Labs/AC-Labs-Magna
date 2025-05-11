@@ -112,9 +112,9 @@ def detect_plate_with_voting(num_photos=5):
     print(f"\n[RESULT] Most common plate: {most_common_plate} (seen {count} times)")
 
     if check_license_plate(most_common_plate):
-        print("✅ Permission Granted (valid plate)")
+        print("Permission Granted (valid plate)")
     else:
-        print("❌ Permission Denied (invalid plate)")
+        print("Permission Denied (invalid plate)")
 
 # ============ Entry Point ============
 
