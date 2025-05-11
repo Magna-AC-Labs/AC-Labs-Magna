@@ -1,25 +1,24 @@
 import cv2
 import imutils
 import numpy as np
+import pytesseract
 import subprocess
-import easyocr
+from collections import Counter
 from checkplates import check_license_plate
 
 # ======= Utility Functions ========
 
-def capture_photo(path='photo.jpg'):
-    print("Capturing image...")
-    subprocess.run(['libcamera-jpeg', '-o', path, '-t', '4000'], check=True)
-    print("Image captured.")
+def capture_photo(path='photo.jpg', delay=1000):
+    subprocess.run(['libcamera-jpeg', '-o', path, '-t', str(delay)], check=True)
 
 def order_points(pts):
     rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]     # top-left
-    rect[2] = pts[np.argmax(s)]     # bottom-right
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
     diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]  # top-right
-    rect[3] = pts[np.argmax(diff)]  # bottom-left
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
     return rect
 
 def four_point_transform(image, pts):
@@ -49,29 +48,17 @@ def unsharp_mask(image, kernel_size=(5, 5), sigma=2.0, amount=1.5, threshold=0):
         np.copyto(sharpened, image, where=low_contrast_mask)
     return sharpened
 
-# ============ Main Function ============
-
-def detect_license_plate(image_path='photo.jpg'):
+def extract_plate_text(image_path):
     img = cv2.imread(image_path)
     if img is None:
-        print("Error: Image not found.")
-        return
+        return None
 
     img = cv2.resize(img, (620, 480))
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
     gray = unsharp_mask(gray)
-    
-    # show grayscale image
-    cv2.imshow("GRAY", gray)
-    cv2.waitKey(0)
 
     edged = cv2.Canny(gray, 30, 200)
-    
-    # show edges 
-    cv2.imshow("EDGED", edged)
-    cv2.waitKey(0)
-    
     cnts = cv2.findContours(edged.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:10]
@@ -85,31 +72,46 @@ def detect_license_plate(image_path='photo.jpg'):
             break
 
     if screenCnt is None:
-        print("No license plate detected.")
-        return
-        
-    # show contours
-    cv2.drawContours(img, [screenCnt], -1, (0, 255, 0), 3)
-    cv2.imshow("Contours", img)
-    cv2.waitKey(0)
+        return None
 
     warped = four_point_transform(img, screenCnt.reshape(4, 2))
     gray_plate = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
     gray_plate = unsharp_mask(gray_plate)
+    _, plate_thresh = cv2.threshold(gray_plate, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # use EasyOCR
-    reader = easyocr.Reader(['en'], gpu=False)
-    results = reader.readtext(gray_plate)
-
-    if results:
-        text = results[0][1]
-    else:
-        text = ""
-
+    config = '--psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    text = pytesseract.image_to_string(plate_thresh, config=config)
     plate = text.strip().upper().replace(" ", "")
-    print(f"\nDetected Plate: {plate}")
 
-    if check_license_plate(plate):
+    return plate if plate else None
+
+# ============ Main Function ============
+
+def detect_plate_with_voting(num_photos=5):
+    plate_results = []
+
+    for i in range(num_photos):
+        path = f"photo_{i}.jpg"
+        print(f"\n[INFO] Capturing photo {i+1}/{num_photos}...")
+        capture_photo(path)
+        plate = extract_plate_text(path)
+        if plate:
+            print(f"Detected: {plate}")
+            plate_results.append(plate)
+        else:
+            print("No plate detected in this image.")
+
+    if not plate_results:
+        print("\n[ERROR] No license plates detected from any image.")
+        return
+
+    # Count occurrences
+    freq = Counter(plate_results)
+    most_common_plate, count = freq.most_common(1)[0]
+
+    print(f"\n[RESULT] Most common plate: {most_common_plate} (seen {count} times)")
+
+    if check_license_plate(most_common_plate):
         print("✅ Permission Granted (valid plate)")
     else:
         print("❌ Permission Denied (invalid plate)")
@@ -117,5 +119,4 @@ def detect_license_plate(image_path='photo.jpg'):
 # ============ Entry Point ============
 
 if __name__ == "__main__":
-    capture_photo()
-    detect_license_plate()
+    detect_plate_with_voting(num_photos=5)
