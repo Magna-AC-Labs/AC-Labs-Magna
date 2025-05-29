@@ -201,7 +201,7 @@ def check_diplomatic_license_plate(plate_number):
 def delete_last_characters(plate_number):  #? Elimina caracterele de final care nu sunt litere
     while len(plate_number) >= 7:
         if plate_number[-1].isalnum() == False:
-            plate_number = plate_number[:-2] #! Aici am avut o problema, avea un caracter in plus la final care trebuia sa fie eliminat
+            plate_number = plate_number[:-1] #! Aici am avut o problema, avea un caracter in plus la final care trebuia sa fie eliminat
         else: 
             break
     return plate_number
