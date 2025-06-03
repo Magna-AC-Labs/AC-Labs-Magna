@@ -211,7 +211,7 @@ def check_license_plate(plate_number):
     plate_number = delete_last_characters(plate_number)
     print("Plate number -> ", plate_number)
     
-    if(len(plate_number) == 0):
+    if(len(plate_number) < 4):
         return False
     
     if(check_common_plate(plate_number)):
