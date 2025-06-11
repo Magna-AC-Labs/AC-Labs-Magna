@@ -1,0 +1,247 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <pthread.h>
+
+#include "serial.h"
+
+#define SERIAL_PORT "/dev/cu.usbserial-AB0ONA10"
+#define SCRIPT_PATH "/Users/mariusfiat/Programming_Environment/Magna/AC-Labs-Magna/src/main3.py"
+
+//* Variables delaration
+pthread_mutex_t serial_lock;
+pthread_mutex_t queue_lock;
+
+typedef struct{ //* Structura folosita pentru fiecare request de la arduino
+    bool request;
+    bool proccessed;
+    bool result; 
+    bool blocked;
+}Request_t;
+
+int last_Request_Index = 0;
+int last_Request_Resolved = 0;
+int identificator = 0;
+
+Request_t queue[2] = {{false, false, false, false}, {false, false, false, false}}; //* Pot avea maxim 100 cereri in coada.
+/*
+    queue[0] folosit pentru a genera cereri la intrare,
+    queue[1] folosit pentru a genera cereri la iesire
+*/
+
+//* Functions declaration
+bool runPythonScript(const char* scriptPath);
+void* read_Thread(void* args);
+void* generate_Func(void* args);
+void printRequest(int);
+
+int main() {
+    //* Mutex care imi blocheaza accesul multiplu la interfata seriala
+    pthread_mutex_init(&serial_lock, NULL);
+    pthread_mutex_init(&queue_lock, NULL);
+
+    //* Ambele threaduri au acces la interfata seriala dar o sa folosesc mutex ca sa nu am accesari in acelasi timp
+    Serial_Init(SERIAL_PORT); //* Initializez si setez toti parametrii
+
+    //* Creez thredurile
+    pthread_t serial_Thread, generate_Thread;
+
+    pthread_create(&serial_Thread, NULL, read_Thread, NULL);
+    pthread_create(&generate_Thread, NULL, generate_Func, NULL);
+
+    //* Astept sa se termine threadurile
+    pthread_join(serial_Thread, NULL);
+    pthread_join(generate_Thread, NULL);
+
+    Serial_ClosePort();
+    pthread_mutex_destroy(&serial_lock);
+    pthread_mutex_destroy(&queue_lock);
+    return 0; // success
+};
+
+bool runPythonScript(const char* scriptPath){ //* Alternativa pentru metoda cu creare pipe, fork, procesul copil face exec pe calea scriptului, 
+//* [...] redirectarea iesirii scriptului care scrie in pipe si procesul parinte citeste rezultatul din pipe.
+
+    char command[256];
+    sprintf(command, "python3 %s 2>/dev/null | grep -E 'True|False'", scriptPath);   //* Folosesc pentru filtrarea outputului, comada grep care imi scrie in pipe doar True sau False, ignora mesajele de la model
+    
+    // Open a pipe to execute the Python script
+    FILE* pipe = popen(command, "r");
+    if (!pipe) {
+        printf("Error opening pipe to Python script.\n");
+    }
+
+    char buffer[256];
+    // Read the output of the Python script
+    if (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        buffer[strlen(buffer)-1] = 0; //* Delete '\n' character 
+        printf("Python script returned: %s\n", buffer);
+    }
+
+    pclose(pipe);
+
+    if(strcmp(buffer, "True") == 0){
+        return true;
+    }
+    else return false;
+}
+
+void read_From_Serial(void){
+    Serial_Init(SERIAL_PORT); //* Initializez si setez toti parametrii
+
+    char msg[10];
+    //char read_buf[256];
+    bool result_Script = false;
+    char barrier_Trigger;
+    
+    while(1){
+        //fgets(msg, 2, stdin); //* Citesc mesajele de la tastatura
+
+        retry:
+        strcpy(msg, Serial_Receive()); //* Citesc de pe interfata seriala, mesaje de la arduino
+        if(strlen(msg) == 0) goto retry;  //* Daca nu am caractere pe seriala mai incerc sa citesc
+        printf("Ce primesc de la arduino: %s\n", msg);
+
+        if(strcmp("E", msg) == 0 || strcmp("L", msg) == 0){
+            barrier_Trigger = msg[0];
+            result_Script = runPythonScript(SCRIPT_PATH);  //* Returneaza True daca numarul a fost corect si este acceptat, sau False daca nu.
+        }
+
+        if(result_Script){
+            if(barrier_Trigger == 'E'){
+                strcpy(msg, "A");   //* Am primit accesul sa ridic bariera
+                Serial_Transmit(msg);
+            } else if (barrier_Trigger == 'L'){
+                strcpy(msg, "C");  //* Numarul nu este corect, nu pot ridica bariera
+                Serial_Transmit(msg);
+            }
+        }
+        else{
+            //printf("Turn off led!\n");
+            if(barrier_Trigger == 'E'){
+                strcpy(msg, "B");
+                Serial_Transmit(msg);
+            }
+            else if(barrier_Trigger == 'L'){
+                strcpy(msg, "D");
+                Serial_Transmit(msg);
+            }
+        }
+    }
+
+    Serial_ClosePort();
+}
+
+void* read_Thread(void* args){
+    char msg[10];
+    bool proccessed_E, proccessed_L;
+    bool result_E, result_L;
+    
+    while(1){
+        pthread_mutex_lock(&serial_lock);
+            strcpy(msg, Serial_Receive()); //* Citesc de pe interfata seriala, mesaje de la arduino 
+        pthread_mutex_unlock(&serial_lock);
+
+        if(strlen(msg) != 0){ //* Daca am citit ceva valid, inseamna ca e un request
+            pthread_mutex_lock(&queue_lock);
+            if(strcmp(msg, "E") == 0 && queue[0].request == false){
+                printf("Am primit pe intrare %s\n", msg);
+                queue[0].request = true;
+            } else if(strcmp(msg, "L") == 0 && queue[1].request == false){
+                printf("Am primit pe iesire %s\n", msg);
+                queue[1].request = true;
+            }
+            pthread_mutex_unlock(&queue_lock);
+        } 
+        else{
+            pthread_mutex_lock(&queue_lock);
+            proccessed_E = queue[0].proccessed;
+            result_E = queue[0].result;
+            proccessed_L = queue[1].proccessed;
+            result_L = queue[1].result;
+            pthread_mutex_unlock(&queue_lock);
+
+            if(proccessed_E == true){
+                if(result_E == true){
+                    //* Deschid intrarea
+                    strcpy(msg, "A");   //* Am primit accesul sa ridic bariera
+                    Serial_Transmit(msg);
+                }
+                else if(result_E == false){
+                    strcpy(msg, "B");
+                    Serial_Transmit(msg);
+                }
+
+                pthread_mutex_lock(&queue_lock);
+                queue[0].request = false; //* Am procesat requestul si acum dau clear
+                queue[0].proccessed = false;
+                pthread_mutex_unlock(&queue_lock);
+            }
+            
+            if(proccessed_L == true){
+                if(result_L == true){
+                    //* Deschid iesirea
+                    strcpy(msg, "C"); 
+                    Serial_Transmit(msg);
+                } else if(result_L == false){
+                    strcpy(msg, "D");
+                    Serial_Transmit(msg);
+                }
+                pthread_mutex_lock(&queue_lock);
+                queue[1].request = false; //* Am procesat requestul si acum dau clear
+                queue[1].proccessed = false;
+                pthread_mutex_unlock(&queue_lock);
+            }
+        }
+    }
+}
+
+void* generate_Func(void* arg){
+    bool request_E, request_L;
+    bool result_E, result_L;
+    bool proccessed_E, proccessed_L;
+
+    while(1){
+        pthread_mutex_lock(&queue_lock);
+        request_E = queue[0].request;
+        request_L = queue[1].request;
+        result_E = queue[0].result;
+        result_L = queue[1].result;
+        proccessed_E = queue[0].proccessed;
+        proccessed_L = queue[1].proccessed;
+        pthread_mutex_unlock(&queue_lock);
+        
+        if(request_E == true && proccessed_E == false){
+            pthread_mutex_lock(&queue_lock);
+            
+            pthread_mutex_unlock(&queue_lock);
+            //* inseamna ca am request pentru intrare
+            // acum campul request devine false, ca deja proecesez cererea
+            result_E = runPythonScript(SCRIPT_PATH);  
+            proccessed_E = true;
+        }
+        else if(request_L == true && proccessed_L == false){
+            pthread_mutex_lock(&queue_lock);
+
+            pthread_mutex_unlock(&queue_lock);
+            //* inseamna ca am request pentru iesire
+            // acum campul de request devine false, ca deja procesez cererea
+            result_L = runPythonScript(SCRIPT_PATH);
+            proccessed_L = true;
+        }
+
+        pthread_mutex_lock(&queue_lock);
+        queue[1].proccessed = proccessed_L;
+        queue[1].result = result_L;
+
+        queue[0].proccessed = proccessed_E;
+        queue[0].result = result_E;
+        pthread_mutex_unlock(&queue_lock);
+    }
+}
+
+/*
+    Sa am un thread care imi citeste din seriala si imi adauga comenzile in coada
+    Iar apoi, celalalt thread care pune mutex pe seriala cand vrea sa trimita comanda procesata
+*/
