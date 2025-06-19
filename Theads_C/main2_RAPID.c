@@ -28,7 +28,7 @@ typedef struct{ //* Structura folosita pentru fiecare request de la arduino
     bool blocked;   //* Nefolosit
 }Request_t;
 
-Request_t queue[2] = {{false, false, false, false}, {false, false, false, false}};
+Request_t queue[2] = {{false, false, false, false}, {false, false, false, false}}; //* Pot avea maxim 100 cereri in coada.
 /*
     queue[0] folosit pentru a genera cereri la intrare,
     queue[1] folosit pentru a genera cereri la iesire
@@ -122,21 +122,21 @@ void runPythonScript(const char* scriptPath){ //* Alternativa pentru metoda cu c
 }
 
 void* read_Thread(void* args){
-    char msg[256];
+    char msg[10];
     bool proccessed_E, proccessed_L;
     bool result_E, result_L;
     
     while(1){
         pthread_mutex_lock(&serial_lock);
-            strncpy(msg, Serial_Receive(), 256); //* Citesc de pe interfata seriala, mesaje de la arduino 
+            strcpy(msg, Serial_Receive()); //* Citesc de pe interfata seriala, mesaje de la arduino 
         pthread_mutex_unlock(&serial_lock);
 
         if(strlen(msg) != 0){ //* Daca am citit ceva valid, inseamna ca e un request
             pthread_mutex_lock(&queue_lock);
-            if(strcmp(msg, "E") == 0 && queue[0].request == false){  //* Senzorul de TRIGGER_ENTRY s-a activat
+            if(strcmp(msg, "E") == 0 && queue[0].request == false){
                 printf("Am primit pe intrare %s\n", msg);
                 queue[0].request = true;
-            } else if(strcmp(msg, "L") == 0 && queue[1].request == false){  //* Senzorul de TRIGGER_LEAVE s-a activat
+            } else if(strcmp(msg, "L") == 0 && queue[1].request == false){
                 printf("Am primit pe iesire %s\n", msg);
                 queue[1].request = true;
             } else if(strcmp(msg, "N") == 0 && queue[0].request == false){
@@ -144,8 +144,6 @@ void* read_Thread(void* args){
                 queue[0].request = false;
             }
             pthread_mutex_unlock(&queue_lock);
-            printf("Pe interfata seriala am primit de la ARDU: %s\n", msg);
-            msg[0] = '\0'; //* Sterg mesajul curent citit
         } 
         else{
             pthread_mutex_lock(&queue_lock);
@@ -350,3 +348,44 @@ void busy_delay_ms(long milliseconds) {
         // Do nothing
     }
 }
+
+/*
+    Sa am un thread care imi citeste din seriala si imi adauga comenzile in coada
+    Iar apoi, celalalt thread care pune mutex pe seriala cand vrea sa trimita comanda procesata
+*/
+
+
+/* Metoda cu timeout
+
+    // Set up `select()` for timeout
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(pipe_Python_C[0], &read_fds);  // Monitor Python-to-C pipe for reading
+
+        struct timeval timeout;
+        timeout.tv_sec = 10;  // 5-second timeout
+        timeout.tv_usec = 0;
+
+        printf("Aștept răspuns de la Python (max 5 secunde)...\n");
+        int ready = select(pipe_Python_C[0] + 1, &read_fds, NULL, NULL, &timeout);
+
+        if (ready == -1) {
+            perror("Eroare în select()");
+            exit(EXIT_FAILURE);
+        } else if (ready == 0) {
+            printf("Timeout: Python nu a răspuns în 5 secunde.\n");
+        } else {
+            // Data is available to read
+            bytes_read = read(pipe_Python_C[0], buffer_in_L, sizeof(buffer_in_L) - 1);
+            if (bytes_read == -1) {
+                perror("Eroare la citirea din pipe_Python_C");
+                exit(EXIT_FAILURE);
+            }
+            if (bytes_read > 0) {
+                buffer_in_L[bytes_read] = '\0';
+                printf("Părintele a citit de la Python: %s", buffer_in_L);
+            } else {
+                printf("Python a închis pipe-ul (EOF).\n");
+            }
+        }
+*/

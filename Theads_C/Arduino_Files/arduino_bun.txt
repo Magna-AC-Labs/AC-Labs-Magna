@@ -1,0 +1,368 @@
+  #include <Servo.h>
+  #include <Wire.h>
+  #include <LiquidCrystal_I2C.h>
+  #include <avr/io.h>
+  #include "uart_lib_ms.hpp"
+
+  LiquidCrystal_I2C lcd(0x27, 20, 4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+
+  // Pin definitions
+  //* Ultrasonics
+  #define ECHO1ENTER_PIN 9 
+  #define TRIG1ENTER_PIN 8
+  #define ECHO2ENTER_PIN 7 
+  #define TRIG2ENTER_PIN 6
+
+  #define ECHO1LEAVE_PIN 5 
+  #define TRIG1LEAVE_PIN 4
+  #define ECHO2LEAVE_PIN 3 
+  #define TRIG2LEAVE_PIN 2
+
+  #define ULTRASONIC_DISTANCE 10
+
+  //* Servos
+  #define SERVOENTER_PIN 11
+  #define SERVOLEAVE_PIN 10
+
+  #define ENTER_BARRIER_START 0
+  #define ENTER_BARRIER_STOP 80
+  #define LEAVE_BARRIER_START 0
+  #define LEAVE_BARRIER_STOP 70
+  #define MOVING_SPEED 7
+
+  Servo barrierServoEnter;
+  Servo barrierServoLeave;
+
+  //* System state
+  #define NUMAR_LOCURI 2
+
+  enum State { IDLE, WAIT_ACCESS, BARRIER_OPEN };
+
+  State enterState = IDLE;
+  State leaveState = IDLE;
+
+  unsigned long enterOpenTime = 0;
+  unsigned long leaveOpenTime = 0;
+  int numarLocuri = NUMAR_LOCURI;
+  bool afisareFull = false;
+
+  // Buffer rezultat pentru fiecare bariera
+  char serialEntryResult = 0;
+  char serialLeaveResult = 0;
+
+  void setup() {
+    //Serial.begin(9600);
+    USART_Init();
+
+    pinMode(ECHO1ENTER_PIN, INPUT);
+    pinMode(TRIG1ENTER_PIN, OUTPUT);
+    pinMode(ECHO2ENTER_PIN, INPUT);
+    pinMode(TRIG2ENTER_PIN, OUTPUT);
+
+    pinMode(ECHO1LEAVE_PIN, INPUT);
+    pinMode(TRIG1LEAVE_PIN, OUTPUT);
+    pinMode(ECHO2LEAVE_PIN, INPUT);
+    pinMode(TRIG2LEAVE_PIN, OUTPUT);
+
+    barrierServoEnter.attach(SERVOENTER_PIN);
+    barrierServoLeave.attach(SERVOLEAVE_PIN);
+    
+    barrierServoEnter.write(0);
+    barrierServoLeave.write(0);
+
+    LCD_Init();
+    Semaphore_Init();
+  }
+
+  void loop() {
+    long distance1Enter = readUltrasonic(ECHO1ENTER_PIN, TRIG1ENTER_PIN);
+    // long distance2Enter = readUltrasonic(ECHO2ENTER_PIN, TRIG2ENTER_PIN);
+    long distance1Leave = readUltrasonic(ECHO1LEAVE_PIN, TRIG1LEAVE_PIN);
+    //long distance2Leave = readUltrasonic(ECHO2LEAVE_PIN, TRIG2LEAVE_PIN);
+
+    char c, correct_ch;
+    // while(Serial.available()){
+    //   correct_ch = Serial.read();
+    //   if(isalpha(correct_ch) && correct_ch != EOF && correct_ch != '\n'){
+    //     c = correct_ch;
+    //     if (c == 'A' || c == 'B') serialEntryResult = c;
+    //     if (c == 'C' || c == 'D') serialLeaveResult = c;
+    //   }
+    // }
+
+    if(USART_Available()){
+      correct_ch = USART_Receive();
+      if(isalpha(correct_ch) && correct_ch != EOF && correct_ch != '\n'){
+        c = correct_ch;
+        if (c == 'A' || c == 'B') serialEntryResult = c;
+        if (c == 'C' || c == 'D') serialLeaveResult = c;
+      }
+    }
+    
+
+    handleEntryBarrier(distance1Enter);
+    handleLeaveBarrier(distance1Leave);
+    
+    delay(50); // Pentru debounce
+  }
+
+  void handleEntryBarrier(long dist1) {
+    switch (enterState) {
+      case IDLE:
+        Red_Light(true);
+        Green_Light(false);
+
+        if (dist1 > 0 && dist1 < ULTRASONIC_DISTANCE) {
+          serialEntryResult = 0; // Sterge vechiul raspuns
+          if(numarLocuri == 0){
+            if(!afisareFull) {
+              LCD_InsufficientSpace();
+              afisareFull = true;
+            }
+            //Serial.println("N");
+            USART_Transmit_STRING("N");
+          }
+          else{
+            afisareFull = false;
+            //Serial.println("E");
+            USART_Transmit_STRING("E");
+
+            LCD_TriggerEnter();
+            enterState = WAIT_ACCESS;
+          }
+        } 
+        break;
+      case WAIT_ACCESS:
+        if (serialEntryResult) {
+          if (serialEntryResult == 'A' && numarLocuri > 0) {
+            LCD_AccessGranted();
+            Red_Light(false);
+            Green_Light(true);
+            openEnterBarrier();
+
+            enterOpenTime = millis();
+            numarLocuri--;
+            enterState = BARRIER_OPEN;
+          } else if (serialEntryResult == 'B') {
+            LCD_AccessDenied();
+            denyEntry();
+            enterState = IDLE;
+          }
+          serialEntryResult = 0;
+        }
+        break;
+      case BARRIER_OPEN:
+        long dist2 = readUltrasonic(ECHO2ENTER_PIN, TRIG2ENTER_PIN);
+        if ((dist1 > 0 && dist1 < ULTRASONIC_DISTANCE)){
+          enterOpenTime = millis();
+        } else {
+            if (millis() - enterOpenTime > 3000) {
+              if(dist2 > 0 && dist2 < ULTRASONIC_DISTANCE){
+                enterOpenTime = millis();
+              } else {
+                closeEnterBarrier();
+                Green_Light(false);
+                Red_Light(true);
+
+                LCD_Idle();
+                enterState = IDLE;
+              }
+            }
+            else{
+              
+            }
+          }
+        break;
+    }
+  }
+
+  void handleLeaveBarrier(long dist1) {
+    switch (leaveState) {
+      case IDLE:
+        if (dist1 > 0 && dist1 < ULTRASONIC_DISTANCE) {
+          serialLeaveResult = 0;
+          //Serial.println("L");
+          USART_Transmit_STRING("L");
+
+          leaveState = WAIT_ACCESS;
+        }
+        break;
+      case WAIT_ACCESS:
+        if (serialLeaveResult) {
+          if (serialLeaveResult == 'C') {
+            openLeaveBarrier();
+
+            leaveOpenTime = millis();
+            if(numarLocuri < NUMAR_LOCURI) numarLocuri++;
+            leaveState = BARRIER_OPEN;
+          } else if (serialLeaveResult == 'D') {
+            denyLeave();
+            leaveState = IDLE;
+          }
+          serialLeaveResult = 0;
+        }
+        break;
+      case BARRIER_OPEN:
+        long dist2 = readUltrasonic(ECHO2LEAVE_PIN, TRIG2LEAVE_PIN);
+        if (dist1 > 0 && dist1 < ULTRASONIC_DISTANCE){
+          leaveOpenTime = millis();
+        }
+        else
+          if (millis() - leaveOpenTime > 5000)
+          {
+            if(dist2 > 0 && dist2 < ULTRASONIC_DISTANCE){
+              leaveOpenTime = millis();
+            }
+            else{
+              closeLeaveBarrier();
+              if(afisareFull) LCD_Idle();
+
+              leaveState = IDLE;
+            }
+          } 
+           
+        break;
+    }
+  }
+
+  void denyEntry() {
+    for (int i = 0; i < 2; i++) {
+      barrierServoEnter.write(45);
+      delay(150);
+      barrierServoEnter.write(0);
+      delay(150);
+    }
+  }
+
+  void denyLeave() {
+    for (int i = 0; i < 2; i++) {
+      barrierServoLeave.write(20);
+      delay(150);
+      barrierServoLeave.write(0);
+      delay(150);
+    }
+  }
+
+
+  long readUltrasonic(int echoPin, int trigPin) {
+    digitalWrite(trigPin, LOW); delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH); delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+
+    long duration = pulseIn(echoPin, HIGH, 20000);
+    long distance = duration / 58;
+    return distance;
+  }
+
+  void openEnterBarrier(void){
+    for(int i = ENTER_BARRIER_START; i < ENTER_BARRIER_STOP; i++){
+      barrierServoEnter.write(i);
+      _delay_ms(MOVING_SPEED);
+    }
+  }
+
+  void closeEnterBarrier(void){
+    for(int i = ENTER_BARRIER_STOP; i > ENTER_BARRIER_START; i--){
+      barrierServoEnter.write(i);
+      _delay_ms(MOVING_SPEED);
+    }
+  }
+
+  void openLeaveBarrier(void){
+    for(int i = LEAVE_BARRIER_START; i < LEAVE_BARRIER_STOP; i++){
+      barrierServoLeave.write(i);
+      _delay_ms(MOVING_SPEED);
+    }
+  }
+
+  void closeLeaveBarrier(void){
+    for(int i = LEAVE_BARRIER_STOP; i > LEAVE_BARRIER_START; i--){
+      barrierServoLeave.write(i);
+      _delay_ms(MOVING_SPEED);
+    }
+  }
+
+  void LCD_Init(){
+    //* LCD
+    lcd.init();                      // initialize the lcd 
+    // Print a message to the LCD.
+    lcd.backlight();
+    lcd.setCursor(3,0);
+    lcd.print("Initializare !");
+    lcd.setCursor(2, 1);
+    lcd.print("Asteptati...");
+
+    _delay_ms(12000);  //* Init phase for yolo
+    LCD_Idle();
+  }
+
+  void LCD_Idle(){
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Sistem Activ!");
+    lcd.setCursor(0, 1);
+    lcd.print("Va puteti apropia");
+    lcd.setCursor(0, 2);
+    lcd.print("Nr locuri ");
+    lcd.setCursor(13, 2);
+    lcd.print(numarLocuri);
+  }
+
+  void LCD_TriggerEnter(){
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Sistem Activ!");
+    lcd.setCursor(0, 1);
+    lcd.print("Asteptati ... ");
+    lcd.setCursor(0, 2);
+    lcd.print("Se proceseaza ... ");
+  }
+
+  void LCD_AccessGranted(){
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Sistem Activ!");
+    lcd.setCursor(0, 1);
+    lcd.print("Acces permis!");
+  }
+
+  void LCD_AccessDenied(){
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Sistem Activ!");
+    lcd.setCursor(0, 1);
+    lcd.print("Acces nepermis!");
+  }
+
+  void LCD_InsufficientSpace(){
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Sistem Activ!");
+    lcd.setCursor(0, 1);
+    lcd.print("Numar insuficient ");
+    lcd.setCursor(0, 2);
+    lcd.print("de locuri!");
+  }
+
+  void Semaphore_Init(){
+    //* PC0 == Red_Light
+    //* PC1 == Green_Light
+    DDRC &= ~3; //* Reset la PC0 PC1
+    DDRC |= 3;
+  }
+
+  void Green_Light(bool on){
+    if(on){
+      PORTC |= 2;
+    } else{
+      PORTC &= ~2;
+    }
+  }
+
+  void Red_Light(bool on){
+    if(on){
+      PORTC |= 1;
+    } else {
+      PORTC &= ~1;
+    }
+  }
